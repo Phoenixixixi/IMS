@@ -1,7 +1,8 @@
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import { Package, TrendingUp, TrendingDown, Users, AlertTriangle, Activity, ArrowRight, BarChart3 } from 'lucide-react';
+import { DropdownMenuRadio } from '@/components/ui/dropdown';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Dashboard', href: '/dashboard' },
@@ -30,7 +31,19 @@ interface MonthlyData {
     out: number;
 }
 
+interface ItemOption {
+    id: number;
+    name: string;
+}
+
+interface Filters {
+    item_id: number | null;
+    month: number | null;
+}
+
 interface Props {
+    items: ItemOption[];
+    filters: Filters;
     stats: DashboardStats;
     recentLogs: RecentLog[];
     monthlyData: MonthlyData[];
@@ -47,6 +60,8 @@ function BarChart({ data }: { data: MonthlyData[] }) {
     const offsetX = 40;
 
     const yTicks = [0, 25, 50, 75, 100].map(p => Math.round((p / 100) * maxVal));
+
+
 
     return (
         <svg viewBox={`0 0 ${chartW} ${chartH + 48}`} className="w-full" aria-label="Monthly stock chart">
@@ -207,7 +222,31 @@ function actionColor(action: string): string {
     return 'bg-slate-500/20 text-slate-300 border-slate-500/30';
 }
 
-export default function Dashboard({ stats, recentLogs, monthlyData }: Props) {
+export default function Dashboard({ items, filters, stats, recentLogs, monthlyData }: Props) {
+    const monthOptions = [
+        { value: '1',  label: 'January' },
+        { value: '2',  label: 'February' },
+        { value: '3',  label: 'March' },
+        { value: '4',  label: 'April' },
+        { value: '5',  label: 'May' },
+        { value: '6',  label: 'June' },
+        { value: '7',  label: 'July' },
+        { value: '8',  label: 'August' },
+        { value: '9',  label: 'September' },
+        { value: '10', label: 'October' },
+        { value: '11', label: 'November' },
+        { value: '12', label: 'December' },
+    ];
+
+    const itemOptions = items.map(i => ({ value: String(i.id), label: i.name }));
+
+    function applyFilter(key: 'item_id' | 'month', value: string | null) {
+        router.get('/dashboard', {
+            item_id: key === 'item_id' ? value : (filters.item_id ?? undefined),
+            month:   key === 'month'   ? value : (filters.month   ?? undefined),
+        } as Record<string, string | number | undefined>, { preserveScroll: true, preserveState: true });
+    }
+
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
             <Head title="Dashboard – IMS" />
@@ -247,12 +286,30 @@ export default function Dashboard({ stats, recentLogs, monthlyData }: Props) {
 
                 {/* === STAT CARDS === */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    <StatCard icon={Package}       label="Total SKUs"       value={stats.totalItems}    sub="Unique products in system"       accent="bg-indigo-500" />
-                    <StatCard icon={Activity}       label="Total Stock"      value={stats.totalStock}    sub="Units across all items"          accent="bg-violet-500" />
-                    <StatCard icon={Users}          label="System Users"     value={stats.totalUsers}    sub="Active accounts"                 accent="bg-sky-500" />
-                    <StatCard icon={TrendingUp}     label="Stock In (7d)"    value={stats.stockIn}       sub="Units received this week"        accent="bg-emerald-500" />
-                    <StatCard icon={TrendingDown}   label="Stock Out (7d)"   value={stats.stockOut}      sub="Units dispatched this week"      accent="bg-rose-500" />
-                    <StatCard icon={AlertTriangle}  label="Low Stock Items"  value={stats.lowStockItems} sub="Items with fewer than 5 units"   accent="bg-amber-500" />
+                    <StatCard icon={Package} label="Total SKUs" value={stats.totalItems} sub="Unique products in system" accent="bg-indigo-500" />
+                    <StatCard icon={Activity} label="Total Stock" value={stats.totalStock} sub="Units across all items" accent="bg-violet-500" />
+                    <StatCard icon={Users} label="System Users" value={stats.totalUsers} sub="Active accounts" accent="bg-sky-500" />
+                    <StatCard icon={TrendingUp} label="Stock In (7d)" value={stats.stockIn} sub="Units received this week" accent="bg-emerald-500" />
+                    <StatCard icon={TrendingDown} label="Stock Out (7d)" value={stats.stockOut} sub="Units dispatched this week" accent="bg-rose-500" />
+                    <StatCard icon={AlertTriangle} label="Low Stock Items" value={stats.lowStockItems} sub="Items with fewer than 5 units" accent="bg-amber-500" />
+                </div>
+
+                {/* === FILTERS === */}
+                <div className="grid grid-cols-2 w-full gap-3">
+                    <DropdownMenuRadio
+                        title="Filter by Item"
+                        placeholder="All Items"
+                        data={itemOptions}
+                        value={filters.item_id ? String(filters.item_id) : undefined}
+                        onValueChange={(val) => applyFilter('item_id', val)}
+                    />
+                    <DropdownMenuRadio
+                        title="Filter by Month"
+                        placeholder="All Months"
+                        data={monthOptions}
+                        value={filters.month ? String(filters.month) : undefined}
+                        onValueChange={(val) => applyFilter('month', val)}
+                    />
                 </div>
 
                 {/* === CHARTS ROW === */}

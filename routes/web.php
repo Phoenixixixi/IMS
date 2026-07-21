@@ -13,50 +13,71 @@ Route::get('/', function () {
 
 Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', function () {
+        $itemId = request('item_id');
+        $month  = request('month'); // 1–12
+
+        // All items for the dropdown
+        $items = \App\Models\Item::select('id', 'name')->orderBy('name')->get();
+
         $totalItems = \App\Models\Item::count();
         $totalStock = \App\Models\Item::sum('stock');
         $totalUsers = \App\Models\User::count();
         $recentLogs = \App\Models\ActionLog::with('user:id,name')->latest()->take(5)->get();
 
-        // Stock in/out for last 7 days
-        $stockIn = \App\Models\ItemTransaction::where('type', 'in')
-            ->where('created_at', '>=', now()->subDays(7))
-            ->sum('quantity');
-        $stockOut = \App\Models\ItemTransaction::where('type', 'out')
-            ->where('created_at', '>=', now()->subDays(7))
-            ->sum('quantity');
+        // Stock in/out for last 7 days — optionally filtered by item
+        $stockInQuery  = \App\Models\ItemTransaction::where('type', 'in')->where('created_at', '>=', now()->subDays(7));
+        $stockOutQuery = \App\Models\ItemTransaction::where('type', 'out')->where('created_at', '>=', now()->subDays(7));
+        if ($itemId) {
+            $stockInQuery->where('item_id', $itemId);
+            $stockOutQuery->where('item_id', $itemId);
+        }
+        $stockIn  = $stockInQuery->sum('quantity');
+        $stockOut = $stockOutQuery->sum('quantity');
 
-        // Low stock items (stock < 5)
+        // Low stock items
         $lowStockItems = \App\Models\Item::where('stock', '<', 5)->count();
 
-        // Monthly transaction chart data (last 6 months, ending in current month e.g. July)
+        // Monthly transaction chart data (last 6 months)
         $monthlyData = [];
         $baseDate = now();
         for ($i = 5; $i >= 0; $i--) {
-            $month = (clone $baseDate)->subMonths($i);
+            $m = (clone $baseDate)->subMonths($i);
+
+            // If a specific month is selected, only show that month's data
+            if ($month && $m->month != $month) {
+                continue;
+            }
+
+            $inQ  = \App\Models\ItemTransaction::where('type', 'in')->whereYear('created_at', $m->year)->whereMonth('created_at', $m->month);
+            $outQ = \App\Models\ItemTransaction::where('type', 'out')->whereYear('created_at', $m->year)->whereMonth('created_at', $m->month);
+
+            if ($itemId) {
+                $inQ->where('item_id', $itemId);
+                $outQ->where('item_id', $itemId);
+            }
+
             $monthlyData[] = [
-                'label' => $month->format('M'),
-                'in' => \App\Models\ItemTransaction::where('type', 'in')
-                    ->whereYear('created_at', $month->year)
-                    ->whereMonth('created_at', $month->month)
-                    ->sum('quantity'),
-                'out' => \App\Models\ItemTransaction::where('type', 'out')
-                    ->whereYear('created_at', $month->year)
-                    ->whereMonth('created_at', $month->month)
-                    ->sum('quantity'),
+                'label' => $m->format('M'),
+                'in'    => $inQ->sum('quantity'),
+                'out'   => $outQ->sum('quantity'),
             ];
         }
 
         return Inertia::render('dashboard', [
+            'items'   => $items,
+            'filters' => [
+                'item_id' => $itemId ? (int) $itemId : null,
+                'month'   => $month  ? (int) $month  : null,
+            ],
             'stats' => [
-                'totalItems' => $totalItems,
-                'totalStock' => $totalStock,
-                'totalUsers' => $totalUsers,
-                'stockIn' => $stockIn,
-                'stockOut' => $stockOut,
+                'totalItems'    => $totalItems,
+                'totalStock'    => $totalStock,
+                'totalUsers'    => $totalUsers,
+                'stockIn'       => $stockIn,
+                'stockOut'      => $stockOut,
                 'lowStockItems' => $lowStockItems,
             ],
-            'recentLogs' => $recentLogs,
+            'recentLogs'  => $recentLogs,
             'monthlyData' => $monthlyData,
         ]);
     })->name('dashboard');
